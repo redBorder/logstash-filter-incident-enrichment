@@ -38,7 +38,7 @@ class LogStash::Filters::IncidentEnrichment < LogStash::Filters::Base
     Configuration.config.each { |key, value| instance_variable_set("@#{key}", value) }
 
     @memcached_server = MemcachedConfig.servers if @memcached_server.empty?
-    @memcached = Dalli::Client.new(@memcached_server, expires_in: 0, value_max_bytes: 4_000_000)
+    @memcached = Dalli::Client.new(@memcached_server, expires_in: 0, value_max_bytes: 4_000_000, serializer: JSON)
 
     # Valores predeterminados si no se configuran
     @default_field_scores = {
@@ -121,7 +121,12 @@ class LogStash::Filters::IncidentEnrichment < LogStash::Filters::Base
   end
 
   def get_severity(event)
-    event.get(SEVERITY) || event.get(PRIORITY) || "low"
+    severity = (event.get(SEVERITY) || event.get(PRIORITY) || 'unknow').downcase
+    unless ['critical', 'extremely high', 'very high', 'high', 'medium', 'low', 'very low', 'unknow', 'clean'].include?(severity)
+      severity = 'unknow'
+    end
+
+    severity
   end
 
   def get_name(event)
@@ -130,10 +135,12 @@ class LogStash::Filters::IncidentEnrichment < LogStash::Filters::Base
 
   def save_incident(prefix, incident)
     return false if incident.empty? || incident[:uuid].nil?
-
+  
     key = "#{prefix}_incident_#{incident[:uuid]}"
+    json_incident = incident.to_json
     begin
-      @memcached.set(key, incident)
+      @memcached.set(key, json_incident)
+      @logger.info("Incident saved successfully with key: #{key}")
     rescue StandardError => e
       @logger.error("Failed to save incident: #{e.message}")
     end
