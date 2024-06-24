@@ -9,17 +9,6 @@ require 'securerandom'
 
 require_relative 'util/incident_enrichment_constant'
 require_relative 'util/memcached_config'
-require_relative 'util/configuration'
-
-module Configuration
-  class << self
-    attr_accessor :config
-
-    def config
-      @config ||= {}
-    end
-  end
-end
 
 class LogStash::Filters::IncidentEnrichment < LogStash::Filters::Base
   include IncidentEnrichmentConstant
@@ -35,7 +24,6 @@ class LogStash::Filters::IncidentEnrichment < LogStash::Filters::Base
 
   def register
     @logger.info("[incident-enrichment] Registering logstash-filter-incident-enrichment")
-    Configuration.config.each { |key, value| instance_variable_set("@#{key}", value) }
 
     @memcached_server = MemcachedConfig.servers if @memcached_server.empty?
     @memcached = Dalli::Client.new(@memcached_server, expires_in: 0, value_max_bytes: 4_000_000, serializer: JSON)
@@ -54,6 +42,7 @@ class LogStash::Filters::IncidentEnrichment < LogStash::Filters::Base
 
     @field_scores = @field_scores.empty? ? @default_field_scores : @field_scores
     @field_map = @field_map.empty? ? @default_field_map : @field_map
+
   rescue StandardError => e
     @logger.error("Failed to initialize memcached: #{e.message}")
   end
@@ -173,13 +162,16 @@ class LogStash::Filters::IncidentEnrichment < LogStash::Filters::Base
   private
 
   def process_incident(event, event_incident_fields, cache_key_prefix, severity)
+    incident_uuid = nil
     event_incident_fields_scores = calculate_field_scores(event_incident_fields, cache_key_prefix)
 
     if sufficient_score?(event_incident_fields_scores)
-      process_existing_incident(event_incident_fields, event_incident_fields_scores, cache_key_prefix)
+      incident_uuid = process_existing_incident(event_incident_fields, event_incident_fields_scores, cache_key_prefix)
     elsif is_severity_high_or_above?(severity)
-      process_new_incident(event, event_incident_fields, event_incident_fields_scores, cache_key_prefix)
+      incident_uuid = process_new_incident(event, event_incident_fields, event_incident_fields_scores, cache_key_prefix)
     end
+
+    incident_uuid
   end
 
   def calculate_field_scores(fields, prefix)
@@ -216,6 +208,8 @@ class LogStash::Filters::IncidentEnrichment < LogStash::Filters::Base
   
     save_incident_fields(cache_key_prefix, incident_uuid, fields_to_save) unless fields_to_save.empty?
     update_fields_expiration_time(cache_key_prefix, fields_to_update)
+
+    incident_uuid
   end
 
   def process_new_incident(event, event_incident_fields, event_incident_fields_scores, cache_key_prefix)
@@ -235,5 +229,7 @@ class LogStash::Filters::IncidentEnrichment < LogStash::Filters::Base
     save_incident_fields(cache_key_prefix, incident_uuid, fields_to_save) unless fields_to_save.empty?
     update_fields_expiration_time(cache_key_prefix, fields_to_update) unless fields_to_update.empty?
     save_incident_relation(fields_to_update, incident_uuid, cache_key_prefix)
+
+    incident_uuid
   end
 end
