@@ -56,7 +56,7 @@ class LogStash::Filters::IncidentEnrichment < LogStash::Filters::Base
   end
 
   def get_cache_key_name(prefix, field, value)
-    "#{prefix}_#{field_prefix(field)}_#{value}"
+    "#{prefix}:#{field_prefix(field)}:#{value}"
   end
 
   def save_incident_fields(prefix, incident_uuid, fields)
@@ -101,7 +101,7 @@ class LogStash::Filters::IncidentEnrichment < LogStash::Filters::Base
     partner_uuid = partners.first
     return unless partner_uuid
 
-    cache_relation_key_name = "#{prefix}_relation_#{incident_uuid}"
+    cache_relation_key_name = "#{prefix}:relation:#{incident_uuid}"
     begin
       @memcached.set(cache_relation_key_name, partner_uuid)
     rescue StandardError => e
@@ -125,7 +125,7 @@ class LogStash::Filters::IncidentEnrichment < LogStash::Filters::Base
   def save_incident(prefix, incident)
     return false if incident.empty? || incident[:uuid].nil?
   
-    key = "#{prefix}_incident_#{incident[:uuid]}"
+    key = "#{prefix}:incident:#{incident[:uuid]}"
     json_incident = incident.to_json
     begin
       @memcached.set(key, json_incident)
@@ -137,7 +137,7 @@ class LogStash::Filters::IncidentEnrichment < LogStash::Filters::Base
 
   def get_key_prefix(event)
     namespace = event.get(NAMESPACE_UUID)
-    namespace.nil? ? 'rb_incident' : "rbincident_#{namespace}"
+    namespace.nil? ? 'rbincident' : "rbincident:#{namespace}"
   end
 
   def is_severity_high_or_above?(severity)
