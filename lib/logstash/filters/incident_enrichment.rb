@@ -109,13 +109,13 @@ class LogStash::Filters::IncidentEnrichment < LogStash::Filters::Base
     end
   end
 
-  def get_severity(event)
-    severity = (event.get(SEVERITY) || event.get(PRIORITY) || 'unknow').downcase
-    unless ['critical', 'extremely high', 'very high', 'high', 'medium', 'low', 'very low', 'unknow', 'clean'].include?(severity)
-      severity = 'unknow'
+  def get_priority(event)
+    priority = (event.get(PRIORITY) || event.get(SEVERITY) || 'unknow').downcase
+    unless ['critical', 'high', 'medium', 'low', 'none', 'unknow', 'info'].include?(priority)
+      priority = 'unknow'
     end
 
-    severity
+    priority
   end
 
   def get_name(event)
@@ -140,20 +140,20 @@ class LogStash::Filters::IncidentEnrichment < LogStash::Filters::Base
     namespace.nil? ? 'rbincident' : "rbincident:#{namespace}"
   end
 
-  def is_severity_high_or_above?(severity)
-    severity == "high" || severity == "critical"
+  def is_priority_high_or_above?(priority)
+    priority == "low" || priority == "medium" || priority == "high" || priority == "critical"
   end
 
   def filter(event)
     cache_key_prefix = get_key_prefix(event)
-    severity = get_severity(event)
+    priority = get_priority(event)
 
     event_incident_fields = @incident_fields.each_with_object({}) do |field, hash|
       value = event.get(field)
       hash[field] = value if value
     end
 
-    incident_uuid = process_incident(event, event_incident_fields, cache_key_prefix, severity)
+    incident_uuid = process_incident(event, event_incident_fields, cache_key_prefix, priority)
     event.set("incident_uuid", incident_uuid) if incident_uuid
 
     filter_matched(event)
@@ -161,13 +161,13 @@ class LogStash::Filters::IncidentEnrichment < LogStash::Filters::Base
 
   private
 
-  def process_incident(event, event_incident_fields, cache_key_prefix, severity)
+  def process_incident(event, event_incident_fields, cache_key_prefix, priority)
     incident_uuid = nil
     event_incident_fields_scores = calculate_field_scores(event_incident_fields, cache_key_prefix)
 
     if sufficient_score?(event_incident_fields_scores)
       incident_uuid = process_existing_incident(event_incident_fields, event_incident_fields_scores, cache_key_prefix)
-    elsif is_severity_high_or_above?(severity)
+    elsif is_priority_high_or_above?(priority)
       incident_uuid = process_new_incident(event, event_incident_fields, event_incident_fields_scores, cache_key_prefix)
     end
 
@@ -217,7 +217,7 @@ class LogStash::Filters::IncidentEnrichment < LogStash::Filters::Base
     incident = {
       uuid: incident_uuid,
       name: get_name(event),
-      severity: get_severity(event),
+      priority: get_priority(event),
       source: @source
     }
 
