@@ -140,7 +140,7 @@ class LogStash::Filters::IncidentEnrichment < LogStash::Filters::Base
     namespace.nil? ? 'rbincident' : "rbincident:#{namespace}"
   end
 
-  def is_priority_high_or_above?(priority)
+  def is_required_priority_or_above?(priority)
     priority == "low" || priority == "medium" || priority == "high" || priority == "critical"
   end
 
@@ -167,7 +167,7 @@ class LogStash::Filters::IncidentEnrichment < LogStash::Filters::Base
 
     if sufficient_score?(event_incident_fields_scores)
       incident_uuid = process_existing_incident(event_incident_fields, event_incident_fields_scores, cache_key_prefix)
-    elsif is_priority_high_or_above?(priority)
+    elsif is_required_priority_or_above?(priority)
       incident_uuid = process_new_incident(event, event_incident_fields, event_incident_fields_scores, cache_key_prefix)
     end
 
