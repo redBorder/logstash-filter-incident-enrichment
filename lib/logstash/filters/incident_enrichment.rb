@@ -165,7 +165,9 @@ class LogStash::Filters::IncidentEnrichment < LogStash::Filters::Base
 
       if result
         min_priority = result[0]['value']
-        return priority_map[priority.to_sym] >= priority_map[min_priority.to_sym]
+        if priority_map.key?(priority.to_sym) && priority_map.key?(min_priority.to_sym)
+          return priority_map[priority.to_sym] >= priority_map[min_priority.to_sym]
+        end
       end
     rescue StandardError => e
       @logger.error "Failed to load data from Settings table: #{e.message}"
