@@ -141,30 +141,36 @@ class LogStash::Filters::IncidentEnrichment < LogStash::Filters::Base
   end
 
   def is_required_priority_or_above?(priority)
-    # Connection to Postgres to see the setting
-    conn = PG.connect(
-      dbname: 'redborder',
-      user: 'redborder',
-      password: `cat /var/www/rb-rails/config/database.yml |grep "password: " | head -n 1 | awk '{print $2}'`,
-      host: 'master.postgresql.service',
-      port: '5432'
-    )
-    result = conn.exec_params('SELECT value FROM settings WHERE name = $1 LIMIT 1', ['incidents_priority_filter'])
-    conn.close
+    begin
+      # Connection to Postgres to see the setting
+      conn = PG.connect(
+        dbname: 'redborder',
+        user: 'redborder',
+        password: `cat /var/www/rb-rails/config/database.yml |grep "password: " | head -n 1 | awk '{print $2}'`.chomp,
+        host: 'master.postgresql.service',
+        port: '5432'
+      )
+      result = conn.exec_params('SELECT value FROM settings WHERE name = $1 LIMIT 1', ['incidents_priority_filter'])
+      conn.close
 
-    priority_map = {
-      'low': 1,
-      'medium': 2,
-      'high': 3,
-      'critical': 4
-    }
+      priority_map = {
+        'info': 1,
+        'unknow': 2,
+        'none': 3,
+        'low': 4,
+        'medium': 5,
+        'high': 6,
+        'critical': 7
+      }
 
-    if result.any?
-      min_priority = result[0]['value']
-      priority_map[priority] >= priority_map[min_priority]
-    else
-      true
+      if result
+        min_priority = result[0]['value']
+        return priority_map[priority.to_sym] >= priority_map[min_priority.to_sym]
+      end
+    rescue StandardError => e
+      @logger.error "Failed to load data from Settings table: #{e.message}"
     end
+    false
   end
 
   def filter(event)
