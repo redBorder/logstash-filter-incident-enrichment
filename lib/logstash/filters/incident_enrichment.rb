@@ -140,8 +140,39 @@ class LogStash::Filters::IncidentEnrichment < LogStash::Filters::Base
     namespace.nil? ? 'rbincident' : "rbincident:#{namespace}"
   end
 
-  def is_priority_high_or_above?(priority)
-    priority == "low" || priority == "medium" || priority == "high" || priority == "critical"
+  def is_required_priority_or_above?(priority)
+    begin
+      # Connection to Postgres to see the setting
+      conn = PG.connect(
+        dbname: 'redborder',
+        user: 'redborder',
+        password: `cat /var/www/rb-rails/config/database.yml |grep "password: " | head -n 1 | awk '{print $2}'`.chomp,
+        host: 'master.postgresql.service',
+        port: '5432'
+      )
+      result = conn.exec_params('SELECT value FROM settings WHERE name = $1 LIMIT 1', ['incidents_priority_filter'])
+      conn.close
+
+      priority_map = {
+        'info': 1,
+        'unknow': 2,
+        'none': 3,
+        'low': 4,
+        'medium': 5,
+        'high': 6,
+        'critical': 7
+      }
+
+      if result
+        min_priority = result[0]['value']
+        if priority_map.key?(priority.to_sym) && priority_map.key?(min_priority.to_sym)
+          return priority_map[priority.to_sym] >= priority_map[min_priority.to_sym]
+        end
+      end
+    rescue StandardError => e
+      @logger.error "Failed to load data from Settings table: #{e.message}"
+    end
+    false
   end
 
   def filter(event)
@@ -167,7 +198,7 @@ class LogStash::Filters::IncidentEnrichment < LogStash::Filters::Base
 
     if sufficient_score?(event_incident_fields_scores)
       incident_uuid = process_existing_incident(event_incident_fields, event_incident_fields_scores, cache_key_prefix)
-    elsif is_priority_high_or_above?(priority)
+    elsif is_required_priority_or_above?(priority)
       incident_uuid = process_new_incident(event, event_incident_fields, event_incident_fields_scores, cache_key_prefix)
     end
 
