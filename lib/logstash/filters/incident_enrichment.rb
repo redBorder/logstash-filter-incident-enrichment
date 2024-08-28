@@ -142,24 +142,20 @@ class LogStash::Filters::IncidentEnrichment < LogStash::Filters::Base
   end
 
   def is_required_priority_or_above?(priority)
-    begin
-      priority_map = {
-        'info': 1,
-        'unknow': 2,
-        'none': 3,
-        'low': 4,
-        'medium': 5,
-        'high': 6,
-        'critical': 7
-      }
+    priority_map = {
+      'info': 1,
+      'unknow': 2,
+      'none': 3,
+      'low': 4,
+      'medium': 5,
+      'high': 6,
+      'critical': 7
+    }
 
-      if @incidents_priority_filter
-        if priority_map.key?(priority.to_sym) && priority_map.key?(@incidents_priority_filter.to_sym)
-          return priority_map[priority.to_sym] >= priority_map[@incidents_priority_filter.to_sym]
-        end
+    if @incidents_priority_filter
+      if priority_map.key?(priority.to_sym) && priority_map.key?(@incidents_priority_filter.to_sym)
+        return priority_map[priority.to_sym] >= priority_map[@incidents_priority_filter.to_sym]
       end
-    rescue StandardError => e
-      @logger.error "Failed to load data from Settings table: #{e.message}"
     end
     false
   end
