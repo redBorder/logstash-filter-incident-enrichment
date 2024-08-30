@@ -15,12 +15,13 @@ class LogStash::Filters::IncidentEnrichment < LogStash::Filters::Base
 
   config_name "incident_enrichment"
 
-  config :cache_expiration, :validate => :number, :default => 600, :required => false
-  config :memcached_server, :validate => :string, :default => "", :required => false
-  config :incident_fields,  :validate => :array,  :default => [], :required => true
-  config :source,           :validate => :string, :required => true
-  config :field_scores,     :validate => :hash,   :default => {}, :required => false
-  config :field_map,        :validate => :hash,   :default => {}, :required => false
+  config :cache_expiration,          :validate => :number, :default => 600, :required => false
+  config :memcached_server,          :validate => :string, :default => "", :required => false
+  config :incident_fields,           :validate => :array,  :default => [], :required => true
+  config :source,                    :validate => :string, :required => true
+  config :field_scores,              :validate => :hash,   :default => {}, :required => false
+  config :field_map,                 :validate => :hash,   :default => {}, :required => false
+  config :incidents_priority_filter, :validate => :string, :default => "high", :required => false
 
   def register
     @logger.info("[incident-enrichment] Registering logstash-filter-incident-enrichment")
@@ -141,36 +142,20 @@ class LogStash::Filters::IncidentEnrichment < LogStash::Filters::Base
   end
 
   def is_required_priority_or_above?(priority)
-    begin
-      # Connection to Postgres to see the setting
-      conn = PG.connect(
-        dbname: 'redborder',
-        user: 'redborder',
-        password: `cat /var/www/rb-rails/config/database.yml |grep "password: " | head -n 1 | awk '{print $2}'`.chomp,
-        host: 'master.postgresql.service',
-        port: '5432'
-      )
-      result = conn.exec_params('SELECT value FROM settings WHERE name = $1 LIMIT 1', ['incidents_priority_filter'])
-      conn.close
+    priority_map = {
+      'info': 1,
+      'unknow': 2,
+      'none': 3,
+      'low': 4,
+      'medium': 5,
+      'high': 6,
+      'critical': 7
+    }
 
-      priority_map = {
-        'info': 1,
-        'unknow': 2,
-        'none': 3,
-        'low': 4,
-        'medium': 5,
-        'high': 6,
-        'critical': 7
-      }
-
-      if result
-        min_priority = result[0]['value']
-        if priority_map.key?(priority.to_sym) && priority_map.key?(min_priority.to_sym)
-          return priority_map[priority.to_sym] >= priority_map[min_priority.to_sym]
-        end
+    if @incidents_priority_filter
+      if priority_map.key?(priority.to_sym) && priority_map.key?(@incidents_priority_filter.to_sym)
+        return priority_map[priority.to_sym] >= priority_map[@incidents_priority_filter.to_sym]
       end
-    rescue StandardError => e
-      @logger.error "Failed to load data from Settings table: #{e.message}"
     end
     false
   end
