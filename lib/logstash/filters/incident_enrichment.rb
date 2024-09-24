@@ -111,7 +111,7 @@ class LogStash::Filters::IncidentEnrichment < LogStash::Filters::Base
   end
 
   def get_priority(event)
-    priority = (event.get(PRIORITY) || event.get(SEVERITY) || 'unknow').downcase
+    priority = (event.get(PRIORITY) || event.get(SEVERITY) || event.get(SYSLOGSEVERITY_TEXT) || 'unknow').downcase
     unless ['critical', 'high', 'medium', 'low', 'none', 'unknow', 'info'].include?(priority)
       priority = 'unknow'
     end
