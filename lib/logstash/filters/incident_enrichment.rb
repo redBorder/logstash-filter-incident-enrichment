@@ -168,9 +168,7 @@ class LogStash::Filters::IncidentEnrichment < LogStash::Filters::Base
       value = event.get(field)
       hash[field] = value if value
     end
- 
-    event_incident_fields[selected_uuid] = event.get(selected_uuid) unless selected_uuid.empty?
-  
+
     incident_uuid = process_incident(event, event_incident_fields, cache_key_prefix, priority)
     event.set("incident_uuid", incident_uuid) if incident_uuid
 
