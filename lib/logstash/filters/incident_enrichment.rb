@@ -123,10 +123,6 @@ class LogStash::Filters::IncidentEnrichment < LogStash::Filters::Base
     event.get(MSG) || "Unknown incident"
   end
 
-  def get_domain(event)
-    event.get("domain")
-  end
-
   def save_incident(prefix, incident)
     return false if incident.empty? || incident[:uuid].nil?
   
@@ -172,15 +168,7 @@ class LogStash::Filters::IncidentEnrichment < LogStash::Filters::Base
       value = event.get(field)
       hash[field] = value if value
     end
-
-    organization_uuid = event.get(ORGANIZATION_UUID)
-    service_provider_uuid = event.get(SERVICE_PROVIDER_UUID)
-    namespace_uuid = event.get(NAMESPACE_UUID)
-  
-    selected_uuid = select_priority_field(organization_uuid, service_provider_uuid, namespace_uuid) || ""
-  
-    event.set("domain", selected_uuid)
-  
+ 
     event_incident_fields[selected_uuid] = event.get(selected_uuid) unless selected_uuid.empty?
   
     incident_uuid = process_incident(event, event_incident_fields, cache_key_prefix, priority)
@@ -191,10 +179,14 @@ class LogStash::Filters::IncidentEnrichment < LogStash::Filters::Base
 
   private
 
-  def select_priority_field(organization_uuid, service_provider_uuid, namespace_uuid)
+  def get_domain(event)
+    organization_uuid = event.get(ORGANIZATION_UUID)
     return organization_uuid if organization_uuid
-    return namespace_uuid if namespace_uuid && service_provider_uuid
+    
+    service_provider_uuid = event.get(SERVICE_PROVIDER_UUID)
     return service_provider_uuid if service_provider_uuid
+    
+    namespace_uuid = event.get(NAMESPACE_UUID)
     return namespace_uuid if namespace_uuid
     
     nil
@@ -258,7 +250,7 @@ class LogStash::Filters::IncidentEnrichment < LogStash::Filters::Base
       name: get_name(event),
       priority: get_priority(event),
       source: @source,
-      sensor: event.get("domain")
+      domain: get_domain(event)
     }
 
     fields_with_no_score = event_incident_fields_scores.select { |_k, v| v.zero? }.keys
