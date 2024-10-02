@@ -177,15 +177,16 @@ class LogStash::Filters::IncidentEnrichment < LogStash::Filters::Base
 
   private
 
-  def get_domain(event)
+  # Get minimum domain uuid organization < namespaces < service provider
+  def get_domain_uuid(event)
     organization_uuid = event.get(ORGANIZATION_UUID)
     return organization_uuid if organization_uuid
-    
-    service_provider_uuid = event.get(SERVICE_PROVIDER_UUID)
-    return service_provider_uuid if service_provider_uuid
-    
+       
     namespace_uuid = event.get(NAMESPACE_UUID)
     return namespace_uuid if namespace_uuid
+
+    service_provider_uuid = event.get(SERVICE_PROVIDER_UUID)
+    return service_provider_uuid if service_provider_uuid
     
     nil
   end
@@ -248,7 +249,7 @@ class LogStash::Filters::IncidentEnrichment < LogStash::Filters::Base
       name: get_name(event),
       priority: get_priority(event),
       source: @source,
-      domain: get_domain(event)
+      domain_uuid: get_domain_uuid(event)
     }
 
     fields_with_no_score = event_incident_fields_scores.select { |_k, v| v.zero? }.keys
