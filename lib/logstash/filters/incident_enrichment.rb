@@ -112,7 +112,7 @@ class LogStash::Filters::IncidentEnrichment < LogStash::Filters::Base
 
   def get_priority(event)
     priority = (event.get(PRIORITY) || event.get(SEVERITY) || event.get(SYSLOGSEVERITY_TEXT) || 'unknown').downcase
-    unless ['critical', 'high', 'medium', 'low', 'none', 'unknown', 'info'].include?(priority)
+    unless ['critical', 'high', 'medium', 'low', 'none', 'unknown', 'info', 'emergency', 'alert', 'error', 'warning', 'notice', 'debug'].include?(priority)
       priority = 'unknown'
     end
 
@@ -143,13 +143,19 @@ class LogStash::Filters::IncidentEnrichment < LogStash::Filters::Base
 
   def is_required_priority_or_above?(priority)
     priority_map = {
-      'info': 1,
-      'unknown': 2,
-      'none': 3,
-      'low': 4,
-      'medium': 5,
-      'high': 6,
-      'critical': 7
+      'unknown': 1,
+      'none': 2,
+      'debug': 3,
+      'info': 4,
+      'notice': 5,
+      'warning': 6,
+      'error': 7,
+      'low': 8,
+      'medium': 9,
+      'high': 10,
+      'critical': 11,
+      'alert': 12,
+      'emergency': 13,
     }
 
     if @incidents_priority_filter
