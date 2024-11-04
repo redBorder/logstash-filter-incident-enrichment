@@ -169,7 +169,7 @@ class LogStash::Filters::IncidentEnrichment < LogStash::Filters::Base
         if intrusion_priority_map.key?(priority.to_sym) && intrusion_priority_map.key?(@incidents_priority_filter.to_sym)
           return intrusion_priority_map[priority.to_sym] >= intrusion_priority_map[@incidents_priority_filter.to_sym]
         end
-      else @source == 'redBorder Vault'
+      elsif @source == 'redBorder Vault'
         if vault_priority_map.key?(priority.to_sym) && vault_priority_map.key?(@incidents_priority_filter.to_sym)
           return vault_priority_map[priority.to_sym] >= vault_priority_map[@incidents_priority_filter.to_sym]
         end
