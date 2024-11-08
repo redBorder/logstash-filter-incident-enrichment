@@ -112,7 +112,7 @@ class LogStash::Filters::IncidentEnrichment < LogStash::Filters::Base
 
   def get_priority(event)
     priority = (event.get(PRIORITY) || event.get(SEVERITY) || event.get(SYSLOGSEVERITY_TEXT) || 'unknown').downcase
-    unless ['critical', 'high', 'medium', 'low', 'none', 'unknown', 'info'].include?(priority)
+    unless ['critical', 'high', 'medium', 'low', 'none', 'unknown', 'info', 'emergency', 'alert', 'error', 'warning', 'notice', 'debug'].include?(priority)
       priority = 'unknown'
     end
 
@@ -142,7 +142,18 @@ class LogStash::Filters::IncidentEnrichment < LogStash::Filters::Base
   end
 
   def is_required_priority_or_above?(priority)
-    priority_map = {
+
+    vault_priority_map = {
+      'debug': 1,
+      'info': 2,
+      'notice': 3,
+      'warning': 4,
+      'error': 5,
+      'critical': 6,
+      'alert': 7,
+      'emergency': 8,
+    }
+    intrusion_priority_map = {
       'info': 1,
       'unknown': 2,
       'none': 3,
@@ -153,8 +164,14 @@ class LogStash::Filters::IncidentEnrichment < LogStash::Filters::Base
     }
 
     if @incidents_priority_filter
-      if priority_map.key?(priority.to_sym) && priority_map.key?(@incidents_priority_filter.to_sym)
-        return priority_map[priority.to_sym] >= priority_map[@incidents_priority_filter.to_sym]
+      if @source == 'redBorder Intrusion'
+        if intrusion_priority_map.key?(priority.to_sym) && intrusion_priority_map.key?(@incidents_priority_filter.to_sym)
+          return intrusion_priority_map[priority.to_sym] >= intrusion_priority_map[@incidents_priority_filter.to_sym]
+        end
+      elsif @source == 'redBorder Vault'
+        if vault_priority_map.key?(priority.to_sym) && vault_priority_map.key?(@incidents_priority_filter.to_sym)
+          return vault_priority_map[priority.to_sym] >= vault_priority_map[@incidents_priority_filter.to_sym]
+        end
       end
     end
     false
