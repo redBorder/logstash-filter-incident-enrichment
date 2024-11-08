@@ -152,7 +152,6 @@ class LogStash::Filters::IncidentEnrichment < LogStash::Filters::Base
       'critical': 6,
       'alert': 7,
       'emergency': 8,
-
     }
     intrusion_priority_map = {
       'info': 1,
@@ -173,6 +172,7 @@ class LogStash::Filters::IncidentEnrichment < LogStash::Filters::Base
         if vault_priority_map.key?(priority.to_sym) && vault_priority_map.key?(@incidents_priority_filter.to_sym)
           return vault_priority_map[priority.to_sym] >= vault_priority_map[@incidents_priority_filter.to_sym]
         end
+      end
     end
     false
   end
