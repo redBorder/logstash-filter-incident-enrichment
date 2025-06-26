@@ -123,9 +123,16 @@ class LogStash::Filters::IncidentEnrichment < LogStash::Filters::Base
     event.get(MSG) || "Unknown incident"
   end
 
+  def get_timestamp(event)
+    timestamp = event.get(TIMESTAMP)
+    return nil unless timestamp
+
+    Time.at(timestamp)
+  end
+
   def save_incident(prefix, incident)
     return false if incident.empty? || incident[:uuid].nil?
-  
+
     key = "#{prefix}:incident:#{incident[:uuid]}"
     json_incident = incident.to_json
     begin
@@ -142,7 +149,6 @@ class LogStash::Filters::IncidentEnrichment < LogStash::Filters::Base
   end
 
   def is_required_priority_or_above?(priority)
-
     vault_priority_map = {
       'debug': 1,
       'info': 2,
@@ -151,7 +157,7 @@ class LogStash::Filters::IncidentEnrichment < LogStash::Filters::Base
       'error': 5,
       'critical': 6,
       'alert': 7,
-      'emergency': 8,
+      'emergency': 8
     }
     intrusion_priority_map = {
       'info': 1,
@@ -198,13 +204,13 @@ class LogStash::Filters::IncidentEnrichment < LogStash::Filters::Base
   def get_domain_uuid(event)
     organization_uuid = event.get(ORGANIZATION_UUID)
     return organization_uuid if organization_uuid
-       
+
     namespace_uuid = event.get(NAMESPACE_UUID)
     return namespace_uuid if namespace_uuid
 
     service_provider_uuid = event.get(SERVICE_PROVIDER_UUID)
     return service_provider_uuid if service_provider_uuid
-    
+
     nil
   end
 
@@ -252,7 +258,7 @@ class LogStash::Filters::IncidentEnrichment < LogStash::Filters::Base
     fields_with_no_score = event_incident_fields_scores.select { |_k, v| v.zero? }.keys
     fields_to_save = event_incident_fields.reject { |k, _| !fields_with_no_score.include?(k) }
     fields_to_update = event_incident_fields.reject { |k, _| fields_with_no_score.include?(k) }
-  
+
     save_incident_fields(cache_key_prefix, incident_uuid, fields_to_save) unless fields_to_save.empty?
     update_fields_expiration_time(cache_key_prefix, fields_to_update)
 
@@ -266,7 +272,8 @@ class LogStash::Filters::IncidentEnrichment < LogStash::Filters::Base
       name: get_name(event),
       priority: get_priority(event),
       source: @source,
-      domain_uuid: get_domain_uuid(event)
+      domain_uuid: get_domain_uuid(event),
+      first_event_at: get_timestamp(event)
     }
 
     fields_with_no_score = event_incident_fields_scores.select { |_k, v| v.zero? }.keys
