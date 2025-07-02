@@ -125,9 +125,19 @@ class LogStash::Filters::IncidentEnrichment < LogStash::Filters::Base
 
   def get_timestamp(event)
     timestamp = event.get(TIMESTAMP)
-    return nil unless timestamp
+    return Time.now unless timestamp
 
-    Time.at(timestamp)
+    # Integer conversion
+    begin
+      return Time.at(Integer(timestamp))
+    rescue ArgumentError, TypeError
+      # Not an integer. Parsing ISO8601 string
+      begin
+        return Time.parse(timestamp)
+      rescue ArgumentError, TypeError
+        return Time.now
+      end
+    end
   end
 
   def save_incident(prefix, incident)
