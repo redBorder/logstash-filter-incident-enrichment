@@ -4,16 +4,15 @@ require 'logstash/filters/base'
 require 'logstash/namespace'
 require 'json'
 require 'time'
-require 'dalli'
+require 'redis'
 require 'securerandom'
 
 require_relative 'util/incident_enrichment_constant'
-require_relative 'util/memcached_config'
 
 class LogStash::Filters::IncidentEnrichment < LogStash::Filters::Base
   include IncidentEnrichmentConstant
 
-  config_name "incident_enrichment"
+  config_name 'incident_enrichment'
 
   config :cache_expiration,          :validate => :number, :default => 600, :required => false
   config :memcached_server,          :validate => :string, :default => "", :required => false
@@ -22,30 +21,40 @@ class LogStash::Filters::IncidentEnrichment < LogStash::Filters::Base
   config :field_scores,              :validate => :hash,   :default => {}, :required => false
   config :field_map,                 :validate => :hash,   :default => {}, :required => false
   config :incidents_priority_filter, :validate => :string, :default => "high", :required => false
+  config :redis_hosts,               :validate => :array,  :default => [], :required => false
+  config :redis_port,                :validate => :number, :default => 26379, :required => false
+  config :redis_password,            :validate => :string, :default => [], :required => false
+  config :redis_db,                  :validate => :number, :default => 0, :required => false
 
   def register
-    @logger.info("[incident-enrichment] Registering logstash-filter-incident-enrichment")
+    @logger.info('[incident-enrichment] Registering logstash-filter-incident-enrichment')
 
-    @memcached_server = MemcachedConfig.servers if @memcached_server.empty?
-    @memcached = Dalli::Client.new(@memcached_server, expires_in: 0, value_max_bytes: 4_000_000, serializer: JSON)
+    redis_options = {
+      url: "redis://:#{@redis_password}@#{@redis_hosts.first}:#{@redis_port}/#{@redis_db}",
+      timeout: 2.0
+    }
+
+    begin
+      @redis = Redis.new(redis_options)
+      @redis.ping
+    rescue => e
+      @logger.error("Failed to connect to Redis: #{e.message}")
+    end
 
     # Valores predeterminados si no se configuran
     @default_field_scores = {
-      "lan_ip" => 100, "src_ip" => 100, "src" => 100, "wan_ip" => 100,
-      "dst" => 100, "dst_ip" => 100, "lan_port" => 30, "wan_port" => 30,
-      "src_port" => 30, "dst_port" => 30
+      'lan_ip' => 100, 'src_ip' => 100, 'src' => 100, 'wan_ip' => 100,
+      'dst' => 100, 'dst_ip' => 100, 'lan_port' => 30, 'wan_port' => 30,
+      'src_port' => 30, 'dst_port' => 30
     }
     @default_field_map = {
-      "lan_ip" => "ip", "src_ip" => "ip", "src" => "ip", "wan_ip" => "ip",
-      "dst_ip" => "ip", "dst" => "ip", "lan_port" => "port", "wan_port" => "port",
-      "src_port" => "port", "dst_port" => "port"
+      'lan_ip' => 'ip', 'src_ip' => 'ip', 'src' => 'ip', 'wan_ip' => 'ip',
+      'dst_ip' => 'ip', 'dst' => 'ip', 'lan_port' => 'port', 'wan_port' => 'port',
+      'src_port' => 'port', 'dst_port' => 'port'
     }
 
     @field_scores = @field_scores.empty? ? @default_field_scores : @field_scores
     @field_map = @field_map.empty? ? @default_field_map : @field_map
-
-  rescue StandardError => e
-    @logger.error("Failed to initialize memcached: #{e.message}")
   end
 
   def get_score(field)
@@ -53,7 +62,7 @@ class LogStash::Filters::IncidentEnrichment < LogStash::Filters::Base
   end
 
   def field_prefix(field)
-    @field_map.fetch(field, "")
+    @field_map.fetch(field, '')
   end
 
   def get_cache_key_name(prefix, field, value)
@@ -64,7 +73,8 @@ class LogStash::Filters::IncidentEnrichment < LogStash::Filters::Base
     fields.each do |field, value|
       key = get_cache_key_name(prefix, field, value)
       begin
-        @memcached.set(key, incident_uuid, @cache_expiration)
+        @redis.set(key, incident_uuid)
+        @redis.expire(key, @cache_expiration)
       rescue StandardError => e
         @logger.error("Failed to save incident field #{field}: #{e.message}")
       end
@@ -75,12 +85,12 @@ class LogStash::Filters::IncidentEnrichment < LogStash::Filters::Base
     fields.each do |field, value|
       cache_key_name = get_cache_key_name(prefix, field, value)
       begin
-        incident_uuid = @memcached.get(cache_key_name)
+        incident_uuid = @redis.get(cache_key_name)
 
         next unless incident_uuid
 
-        @memcached.delete(cache_key_name)
-        @memcached.set(cache_key_name, incident_uuid, @cache_expiration)
+        @redis.set(cache_key_name, incident_uuid)
+        @redis.expire(cache_key_name, @cache_expiration)
       rescue StandardError => e
         @logger.error("Failed to update expiration time for #{field}: #{e.message}")
       end
@@ -92,7 +102,7 @@ class LogStash::Filters::IncidentEnrichment < LogStash::Filters::Base
 
     partners = fields.map do |f, value|
       begin
-        @memcached.get(get_cache_key_name(prefix, f, value))
+        @redis.get(get_cache_key_name(prefix, f, value))
       rescue StandardError => e
         @logger.error("Failed to retrieve cache key for field #{f}: #{e.message}")
         nil
@@ -104,7 +114,7 @@ class LogStash::Filters::IncidentEnrichment < LogStash::Filters::Base
 
     cache_relation_key_name = "#{prefix}:relation:#{incident_uuid}"
     begin
-      @memcached.set(cache_relation_key_name, partner_uuid)
+      @redis.set(cache_relation_key_name, partner_uuid)
     rescue StandardError => e
       @logger.error("Failed to save incident relation: #{e.message}")
     end
@@ -120,7 +130,7 @@ class LogStash::Filters::IncidentEnrichment < LogStash::Filters::Base
   end
 
   def get_name(event)
-    event.get(MSG) || "Unknown incident"
+    event.get(MSG) || 'Unknown incident'
   end
 
   def get_timestamp(event)
@@ -129,13 +139,13 @@ class LogStash::Filters::IncidentEnrichment < LogStash::Filters::Base
 
     # Integer conversion
     begin
-      return Time.at(Integer(timestamp))
+      Time.at(Integer(timestamp))
     rescue ArgumentError, TypeError
       # Not an integer. Parsing ISO8601 string
       begin
-        return Time.parse(timestamp)
+        Time.parse(timestamp)
       rescue ArgumentError, TypeError
-        return Time.now
+        Time.now
       end
     end
   end
@@ -146,7 +156,8 @@ class LogStash::Filters::IncidentEnrichment < LogStash::Filters::Base
     key = "#{prefix}:incident:#{incident[:uuid]}"
     json_incident = incident.to_json
     begin
-      @memcached.set(key, json_incident)
+      @redis.set(key, json_incident)
+      @redis.expire(key, @cache_expiration)
       @logger.info("Incident saved successfully with key: #{key}")
     rescue StandardError => e
       @logger.error("Failed to save incident: #{e.message}")
@@ -203,7 +214,7 @@ class LogStash::Filters::IncidentEnrichment < LogStash::Filters::Base
     end
 
     incident_uuid = process_incident(event, event_incident_fields, cache_key_prefix, priority)
-    event.set("incident_uuid", incident_uuid) if incident_uuid
+    event.set('incident_uuid', incident_uuid) if incident_uuid
 
     filter_matched(event)
   end
@@ -242,7 +253,7 @@ class LogStash::Filters::IncidentEnrichment < LogStash::Filters::Base
       field_score = get_score(field)
       cache_key = get_cache_key_name(prefix, field, value)
       begin
-        hash[field] = @memcached.get(cache_key) ? field_score : 0
+        hash[field] = @redis.get(cache_key) ? field_score : 0
       rescue StandardError => e
         @logger.error("Failed to get cache key for field #{field}: #{e.message}")
         hash[field] = 0
@@ -257,7 +268,7 @@ class LogStash::Filters::IncidentEnrichment < LogStash::Filters::Base
   def process_existing_incident(event_incident_fields, event_incident_fields_scores, cache_key_prefix)
     max_score_field, _max_score = event_incident_fields_scores.first
     begin
-      incident_uuid = @memcached.get(get_cache_key_name(cache_key_prefix, max_score_field, event_incident_fields[max_score_field]))
+      incident_uuid = @redis.get(get_cache_key_name(cache_key_prefix, max_score_field, event_incident_fields[max_score_field]))
     rescue StandardError => e
       @logger.error("Failed to get existing incident UUID: #{e.message}")
       return
