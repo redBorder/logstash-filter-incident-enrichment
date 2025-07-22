@@ -1,6 +1,6 @@
 Gem::Specification.new do |s|
   s.name = 'logstash-filter-incident-enrichment'
-  s.version = '0.0.9'
+  s.version = '1.0.0'
   s.licenses = ['Apache License (2.0)']
   s.summary = "This filter is part of the redBorder enrich system. Create incidents into a cache, keep track of the relevant event fields and enrich the event when necessary."
   s.description = "This gem is a Logstash plugin required to be installed on top of the Logstash core pipeline using $LS_HOME/bin/logstash-plugin install gemname. This gem is not a stand-alone program"
