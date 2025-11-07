@@ -21,6 +21,7 @@ class LogStash::Filters::IncidentEnrichment < LogStash::Filters::Base
   config :field_scores,              :validate => :hash,   :default => {}, :required => false
   config :field_map,                 :validate => :hash,   :default => {}, :required => false
   config :incidents_priority_filter, :validate => :string, :default => "high", :required => false
+  config :malware_score_threshold,   :validate => :number, :default => 50, :required => false
   config :redis_hosts,               :validate => :array,  :default => [], :required => false
   config :redis_port,                :validate => :number, :default => 26379, :required => false
   config :redis_password,            :validate => :string, :default => [], :required => false
@@ -126,11 +127,19 @@ class LogStash::Filters::IncidentEnrichment < LogStash::Filters::Base
       priority = 'unknown'
     end
 
+    if @source == 'Malware'
+      score = event.get('malware_score') || 0
+      priority = 'malware' if score >= @malware_score_threshold
+    end
     priority
   end
 
   def get_name(event)
-    event.get(MSG) || 'Unknown incident'
+    if @source == 'Malware'
+      "Malware detected in #{event.get('filename') || 'unknown file'}"
+    else
+      event.get(MSG) || 'Unknown incident'
+    end
   end
 
   def get_timestamp(event)
