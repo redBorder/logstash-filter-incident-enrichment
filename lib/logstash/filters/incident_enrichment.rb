@@ -129,7 +129,7 @@ class LogStash::Filters::IncidentEnrichment < LogStash::Filters::Base
 
     if @source == 'Malware'
       score = event.get('malware_score') || 0
-      priority = 'malware' if score >= @malware_score_threshold
+      priority = @incidents_priority_filter if score >= @malware_score_threshold
     end
     priority
   end
@@ -208,6 +208,8 @@ class LogStash::Filters::IncidentEnrichment < LogStash::Filters::Base
         if vault_priority_map.key?(priority.to_sym) && vault_priority_map.key?(@incidents_priority_filter.to_sym)
           return vault_priority_map[priority.to_sym] >= vault_priority_map[@incidents_priority_filter.to_sym]
         end
+      elsif @source == 'Malware'
+        return true if priority != 'unknown'
       end
     end
     false
