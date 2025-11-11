@@ -308,7 +308,7 @@ class LogStash::Filters::IncidentEnrichment < LogStash::Filters::Base
       first_event_at: get_timestamp(event)
     }
 
-    incident[:malware_hash] = event.get('sha256') || '' if source == 'Malware'
+    incident[:malware_hash] = event.get('sha256') || '' if @source == 'Malware'
 
     fields_with_no_score = event_incident_fields_scores.select { |_k, v| v.zero? }.keys
     fields_to_save = event_incident_fields.reject { |k, _| !fields_with_no_score.include?(k) }
