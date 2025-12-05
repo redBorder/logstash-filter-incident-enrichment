@@ -46,12 +46,12 @@ class LogStash::Filters::IncidentEnrichment < LogStash::Filters::Base
     @default_field_scores = {
       'lan_ip' => 100, 'src_ip' => 100, 'src' => 100, 'wan_ip' => 100,
       'dst' => 100, 'dst_ip' => 100, 'lan_port' => 30, 'wan_port' => 30,
-      'src_port' => 30, 'dst_port' => 30
+      'src_port' => 30, 'dst_port' => 30, 'sha256' => 100
     }
     @default_field_map = {
       'lan_ip' => 'ip', 'src_ip' => 'ip', 'src' => 'ip', 'wan_ip' => 'ip',
       'dst_ip' => 'ip', 'dst' => 'ip', 'lan_port' => 'port', 'wan_port' => 'port',
-      'src_port' => 'port', 'dst_port' => 'port'
+      'src_port' => 'port', 'dst_port' => 'port', 'sha256' => 'hash'
     }
 
     @field_scores = @field_scores.empty? ? @default_field_scores : @field_scores
