@@ -178,7 +178,7 @@ class LogStash::Filters::IncidentEnrichment < LogStash::Filters::Base
     namespace.nil? ? 'rbincident' : "rbincident:#{namespace}"
   end
 
-  def is_required_priority_or_above?(priority)
+  def is_required_priority_or_above?(priority, malware_score=0)
     vault_priority_map = {
       'debug': 1,
       'info': 2,
@@ -209,7 +209,7 @@ class LogStash::Filters::IncidentEnrichment < LogStash::Filters::Base
           return vault_priority_map[priority.to_sym] >= vault_priority_map[@incidents_priority_filter.to_sym]
         end
       elsif @source == 'Malware'
-        return true if priority != 'unknown'
+        return malware_score >= @malware_score_threshold
       end
     end
     false
@@ -249,10 +249,11 @@ class LogStash::Filters::IncidentEnrichment < LogStash::Filters::Base
   def process_incident(event, event_incident_fields, cache_key_prefix, priority)
     incident_uuid = nil
     event_incident_fields_scores = calculate_field_scores(event_incident_fields, cache_key_prefix)
+    malware_score = event.get('malware_score') || 0
 
     if sufficient_score?(event_incident_fields_scores)
       incident_uuid = process_existing_incident(event_incident_fields, event_incident_fields_scores, cache_key_prefix)
-    elsif is_required_priority_or_above?(priority)
+    elsif is_required_priority_or_above?(priority, malware_score)
       incident_uuid = process_new_incident(event, event_incident_fields, event_incident_fields_scores, cache_key_prefix)
     end
 
