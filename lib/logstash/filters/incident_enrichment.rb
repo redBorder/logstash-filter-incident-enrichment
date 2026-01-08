@@ -21,6 +21,7 @@ class LogStash::Filters::IncidentEnrichment < LogStash::Filters::Base
   config :field_scores,              :validate => :hash,   :default => {}, :required => false
   config :field_map,                 :validate => :hash,   :default => {}, :required => false
   config :incidents_priority_filter, :validate => :string, :default => "high", :required => false
+  config :malware_score_threshold,   :validate => :number, :default => 50, :required => false
   config :redis_hosts,               :validate => :array,  :default => [], :required => false
   config :redis_port,                :validate => :number, :default => 26379, :required => false
   config :redis_password,            :validate => :string, :default => [], :required => false
@@ -45,12 +46,12 @@ class LogStash::Filters::IncidentEnrichment < LogStash::Filters::Base
     @default_field_scores = {
       'lan_ip' => 100, 'src_ip' => 100, 'src' => 100, 'wan_ip' => 100,
       'dst' => 100, 'dst_ip' => 100, 'lan_port' => 30, 'wan_port' => 30,
-      'src_port' => 30, 'dst_port' => 30
+      'src_port' => 30, 'dst_port' => 30, 'sha256' => 100
     }
     @default_field_map = {
       'lan_ip' => 'ip', 'src_ip' => 'ip', 'src' => 'ip', 'wan_ip' => 'ip',
       'dst_ip' => 'ip', 'dst' => 'ip', 'lan_port' => 'port', 'wan_port' => 'port',
-      'src_port' => 'port', 'dst_port' => 'port'
+      'src_port' => 'port', 'dst_port' => 'port', 'sha256' => 'hash'
     }
 
     @field_scores = @field_scores.empty? ? @default_field_scores : @field_scores
@@ -126,11 +127,19 @@ class LogStash::Filters::IncidentEnrichment < LogStash::Filters::Base
       priority = 'unknown'
     end
 
+    if @source == 'Malware'
+      score = event.get('malware_score') || 0
+      priority = @incidents_priority_filter if score >= @malware_score_threshold
+    end
     priority
   end
 
   def get_name(event)
-    event.get(MSG) || 'Unknown incident'
+    if @source == 'Malware'
+      "Malware detected in #{event.get('file_name') || 'unknown file'}"
+    else
+      event.get(MSG) || 'Unknown incident'
+    end
   end
 
   def get_timestamp(event)
@@ -169,7 +178,7 @@ class LogStash::Filters::IncidentEnrichment < LogStash::Filters::Base
     namespace.nil? ? 'rbincident' : "rbincident:#{namespace}"
   end
 
-  def is_required_priority_or_above?(priority)
+  def is_required_priority_or_above?(priority, malware_score=0)
     vault_priority_map = {
       'debug': 1,
       'info': 2,
@@ -199,6 +208,8 @@ class LogStash::Filters::IncidentEnrichment < LogStash::Filters::Base
         if vault_priority_map.key?(priority.to_sym) && vault_priority_map.key?(@incidents_priority_filter.to_sym)
           return vault_priority_map[priority.to_sym] >= vault_priority_map[@incidents_priority_filter.to_sym]
         end
+      elsif @source == 'Malware'
+        return malware_score >= @malware_score_threshold
       end
     end
     false
@@ -238,10 +249,11 @@ class LogStash::Filters::IncidentEnrichment < LogStash::Filters::Base
   def process_incident(event, event_incident_fields, cache_key_prefix, priority)
     incident_uuid = nil
     event_incident_fields_scores = calculate_field_scores(event_incident_fields, cache_key_prefix)
+    malware_score = event.get('malware_score') || 0
 
     if sufficient_score?(event_incident_fields_scores)
       incident_uuid = process_existing_incident(event_incident_fields, event_incident_fields_scores, cache_key_prefix)
-    elsif is_required_priority_or_above?(priority)
+    elsif is_required_priority_or_above?(priority, malware_score)
       incident_uuid = process_new_incident(event, event_incident_fields, event_incident_fields_scores, cache_key_prefix)
     end
 
@@ -296,6 +308,8 @@ class LogStash::Filters::IncidentEnrichment < LogStash::Filters::Base
       domain_uuid: get_domain_uuid(event),
       first_event_at: get_timestamp(event)
     }
+
+    incident[:malware_hash] = event.get('hash') || '' if @source == 'Malware'
 
     fields_with_no_score = event_incident_fields_scores.select { |_k, v| v.zero? }.keys
     fields_to_save = event_incident_fields.reject { |k, _| !fields_with_no_score.include?(k) }
