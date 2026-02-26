@@ -141,7 +141,7 @@ class LogStash::Filters::IncidentEnrichment < LogStash::Filters::Base
     when 'Vault'
       "Syslog incident from sensor #{event.get('sensor_name')}"
     else
-      event.get(MSG) || 'Syslog incident from sensor '
+      event.get(MSG) || 'Unknown incident'
     end
   end
 
