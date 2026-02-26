@@ -135,10 +135,13 @@ class LogStash::Filters::IncidentEnrichment < LogStash::Filters::Base
   end
 
   def get_name(event)
-    if @source == 'Malware'
+    case @source
+    when 'Malware'
       "Malware detected in #{event.get('file_name') || 'unknown file'}"
+    when 'Vault'
+      "Syslog incident from sensor #{event.get('sensor_name')}"
     else
-      event.get(MSG) || 'Unknown incident'
+      event.get(MSG) || 'Syslog incident from sensor '
     end
   end
 
